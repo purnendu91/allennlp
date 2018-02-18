@@ -50,7 +50,7 @@ from allennlp.data import Vocabulary
 from allennlp.data.instance import Instance
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.iterators.data_iterator import DataIterator
-from allennlp.models.archival import archive_model
+from allennlp.models.archival import archive_model, CONFIG_NAME
 from allennlp.models.model import Model
 from allennlp.training.trainer import Trainer
 
@@ -73,9 +73,6 @@ class Train(Subcommand):
         serialization.add_argument('-s', '--serialization-dir',
                                    type=str,
                                    help='directory in which to save the model and its logs')
-        serialization.add_argument('--serialization_dir',
-                                   type=str,
-                                   help=argparse.SUPPRESS)
 
         subparser.add_argument('-o', '--overrides',
                                type=str,
@@ -131,6 +128,12 @@ def datasets_from_params(params: Params) -> Dict[str, Iterable[Instance]]:
     Load all the datasets specified by the config.
     """
     dataset_reader = DatasetReader.from_params(params.pop('dataset_reader'))
+    validation_dataset_reader_params = params.pop("validation_dataset_reader", None)
+
+    validation_and_test_dataset_reader: DatasetReader = dataset_reader
+    if validation_dataset_reader_params is not None:
+        logger.info("Using a separate dataset reader to load validation and test data.")
+        validation_and_test_dataset_reader = DatasetReader.from_params(validation_dataset_reader_params)
 
     train_data_path = params.pop('train_data_path')
     logger.info("Reading training data from %s", train_data_path)
@@ -141,13 +144,13 @@ def datasets_from_params(params: Params) -> Dict[str, Iterable[Instance]]:
     validation_data_path = params.pop('validation_data_path', None)
     if validation_data_path is not None:
         logger.info("Reading validation data from %s", validation_data_path)
-        validation_data = dataset_reader.read(validation_data_path)
+        validation_data = validation_and_test_dataset_reader.read(validation_data_path)
         datasets["validation"] = validation_data
 
     test_data_path = params.pop("test_data_path", None)
     if test_data_path is not None:
         logger.info("Reading test data from %s", test_data_path)
-        test_data = dataset_reader.read(test_data_path)
+        test_data = validation_and_test_dataset_reader.read(test_data_path)
         datasets["test"] = test_data
 
     return datasets
@@ -182,7 +185,7 @@ def train_model(params: Params, serialization_dir: str, file_friendly_logging: b
     handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
     logging.getLogger().addHandler(handler)
     serialization_params = deepcopy(params).as_dict(quiet=True)
-    with open(os.path.join(serialization_dir, "model_params.json"), "w") as param_file:
+    with open(os.path.join(serialization_dir, CONFIG_NAME), "w") as param_file:
         json.dump(serialization_params, param_file, indent=4)
 
     all_datasets = datasets_from_params(params)
