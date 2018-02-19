@@ -26,19 +26,13 @@ class Header extends React.Component {
           <div className="header__content">
             <nav>
               <ul>
-                {buildLink("machine-comprehension", "Machine Comprehension")}
-                {buildLink("textual-entailment", "Textual Entailment")}
-                {buildLink("semantic-role-labeling", "Semantic Role Labeling")}
-                {buildLink("coreference-resolution", "Coreference Resolution")}
-                {buildLink("named-entity-recognition", "Named Entity Recognition")}
-              </ul>
+                {buildLink("machine-comprehension", "Question Answering System")}
+                </ul>
             </nav>
             <h1 className="header__content__logo">
-              <a href="http://www.allennlp.org/" target="_blank" rel="noopener noreferrer">
-                <svg>
-                  <use xlinkHref="#icon__allennlp-logo"></use>
-                </svg>
-                <span className="u-hidden">AllenNLP</span>
+              <a href="http://nsfcbl.org/" target="_blank" rel="noopener noreferrer">
+              <img src = "assets/cbl_logo_full.png"/>
+                <span className="u-hidden">Li lab</span>
               </a>
             </h1>
           </div>

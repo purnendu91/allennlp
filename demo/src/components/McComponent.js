@@ -14,12 +14,12 @@ import ModelIntro from './ModelIntro'
 
 const mcExamples = [
     {
-      passage: "A reusable launch system (RLS, or reusable launch vehicle, RLV) is a launch system which is capable of launching a payload into space more than once. This contrasts with expendable launch systems, where each launch vehicle is launched once and then discarded. No completely reusable orbital launch system has ever been created. Two partially reusable launch systems were developed, the Space Shuttle and Falcon 9. The Space Shuttle was partially reusable: the orbiter (which included the Space Shuttle main engines and the Orbital Maneuvering System engines), and the two solid rocket boosters were reused after several months of refitting work for each launch. The external tank was discarded after each flight.",
-      question: "How many partially reusable launch systems were developed?",
+      passage: "On May 21, 2013, NFL owners at their spring meetings in Boston voted and awarded the game to Levi's Stadium. The $1.2 billion stadium opened in 2014. It is the first Super Bowl held in the San Francisco Bay Area since Super Bowl XIX in 1985, and the first in California since Super Bowl XXXVII took place in San Diego in 2003.",
+      question: "Who voted on the venue for Super Bowl 50?",
     },
     {
-      passage: "Robotics is an interdisciplinary branch of engineering and science that includes mechanical engineering, electrical engineering, computer science, and others. Robotics deals with the design, construction, operation, and use of robots, as well as computer systems for their control, sensory feedback, and information processing. These technologies are used to develop machines that can substitute for humans. Robots can be used in any situation and for any purpose, but today many are used in dangerous environments (including bomb detection and de-activation), manufacturing processes, or where humans cannot survive. Robots can take on any form but some are made to resemble humans in appearance. This is said to help in the acceptance of a robot in certain replicative behaviors usually performed by people. Such robots attempt to replicate walking, lifting, speech, cognition, and basically anything a human can do.",
-      question: "What do robots that resemble humans attempt to do?",
+      passage: "Super Bowl 50 was an American football game to determine the champion of the National Football League (NFL) for the 2015 season. The American Football Conference (AFC) champion Denver Broncos defeated the National Football Conference (NFC) champion Carolina Panthers 24â€“10 to earn their third Super Bowl title. The game was played on February 7, 2016, at Levi's Stadium in the San Francisco Bay Area at Santa Clara, California. As this was the 50th Super Bowl, the league emphasized the \"golden anniversary\" with various gold-themed initiatives, as well as temporarily suspending the tradition of naming each Super Bowl game with Roman numerals (under which the game would have been known as 'Super Bowl L'), so that the logo could prominently feature the Arabic numerals 50.",
+      question: "What city did Super Bowl 50 take place in?",
     },
     {
       passage: "The Matrix is a 1999 science fiction action film written and directed by The Wachowskis, starring Keanu Reeves, Laurence Fishburne, Carrie-Anne Moss, Hugo Weaving, and Joe Pantoliano. It depicts a dystopian future in which reality as perceived by most humans is actually a simulated reality called \"the Matrix\", created by sentient machines to subdue the human population, while their bodies' heat and electrical activity are used as an energy source. Computer programmer \"Neo\" learns this truth and is drawn into a rebellion against the machines, which involves other people who have been freed from the \"dream world.\"",
@@ -102,7 +102,7 @@ render() {
 
     return (
         <div className="model__content">
-        <ModelIntro title={title} description={description} />
+        <ModelIntro/> 
             <div className="form__instructions"><span>Enter text or</span>
             <select disabled={outputState === "working"} onChange={this.handleListChange}>
                 <option value="">Choose an example...</option>
@@ -135,14 +135,86 @@ render() {
 *******************************************************************************/
 
 class McOutput extends React.Component {
-    render() {
-      const { passage, answer, attention, question_tokens, passage_tokens } = this.props;
 
-      const start = passage.indexOf(answer);
+    ColorLuminance(hex, lum) {
+
+	// validate hex string
+	hex = String(hex).replace(/[^0-9a-f]/gi, '');
+	if (hex.length < 6) {
+		hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+	}
+	lum = lum || 0;
+
+	// convert to decimal and change luminosity
+	var rgb = "#", c, i;
+	for (i = 0; i < 3; i++) {
+		c = parseInt(hex.substr(i*2,2), 16);
+		c = Math.round(Math.min(Math.max(0, c + (c * lum)), 255)).toString(16);
+		rgb += ("00"+c).substr(c.length);
+	}
+
+	return rgb;
+}
+
+
+
+    render() {
+      const { passage, answer, attention, question_tokens, passage_tokens, best_confs, best_starts, best_ends } = this.props;
+
+//      const start = passage.indexOf(answer);
+//      const head = passage.slice(0, start);
+//      const tail = passage.slice(start + answer.length);
+
+//      const best_confs = [1.5019152499462507e-07, 6.246895623007731e-07, 0.9867215156555176];
+//      const best_starts = [0, 2, 5];
+//      const best_ends = [0, 3, 5];
+
+      var modHtml = ""
+
+      var start = passage.indexOf(passage_tokens[best_starts[0]]);
       const head = passage.slice(0, start);
-      const tail = passage.slice(start + answer.length);
+      var lastWord = passage_tokens[best_ends[best_ends.length-1]];
+      var end = passage.indexOf(lastWord) + lastWord.length;
+      const tail = passage.slice(end, passage.length);
+
+      const newBg = this.ColorLuminance("40affd", 0.1);
+
+//      If your number X falls between A and B, and you would like Y to fall between C and D, you can apply the following linear transform:
+//
+//      Y = (X-A)/(B-A) * (D-C) + C
+
+
+
+      for(var i = 0; i < best_confs.length; i++){
+
+            start = passage.indexOf(passage_tokens[best_starts[i]]);
+
+            var spanLastWord = passage_tokens[best_ends[i]];
+            var lastWordIndex = passage.indexOf(spanLastWord)
+            var end = lastWordIndex + spanLastWord.length;
+
+            var answerSpan = passage.slice(start, end);
+
+            modHtml += "<span style=\"color:#000; background: " +newBg+ ";\">"+ answerSpan +"</span>";
+
+            if(i+1 < best_confs.length){
+
+                start = passage.indexOf(passage_tokens[best_ends[i]]) +  passage_tokens[best_ends[i]].length;
+
+                end = passage.indexOf(passage_tokens[best_starts[i+1]]);
+
+                var plainText = passage.slice(start, end);
+
+                modHtml += "<span>"+ plainText +"</span>";
+            }
+      }
+
+//        const concatAnswer = "<span style=\"color:#fff; background: " +newBg+ ";\">"+ answer +"</span>";
+
 
       return (
+
+
         <div className="model__content">
           <div className="form__field">
             <label>Answer</label>
@@ -153,28 +225,53 @@ class McOutput extends React.Component {
             <label>Passage Context</label>
             <div className="passage model__content__summary">
               <span>{head}</span>
-              <span className="passage__answer">{answer}</span>
+              <span dangerouslySetInnerHTML={{__html: modHtml}}></span>
               <span>{tail}</span>
-            </div>
-          </div>
+              <div>
+              <span> {head.length} </span>
+              </div>
+              <div>
+              <span> {tail.length}</span>
+              </div>
 
-          <div className="form__field">
-            <Collapsible trigger="Model internals (beta)">
-              <Collapsible trigger="Passage to Question attention">
-                <span>
-                  For every passage word, the model computes an attention over the question words.
-                  This heatmap shows that attention, which is normalized for every row in the matrix.
-                </span>
-                <div className="heatmap">
-                  <HeatMap xLabels={question_tokens} yLabels={passage_tokens} data={attention} />
-                </div>
-              </Collapsible>
-            </Collapsible>
+            </div>
           </div>
         </div>
       );
     }
   }
+
+
+
+
+//        const styles = {
+//            container: {
+//              background: "#40affd",
+//              color: "#fff"
+//            }
+//        };
+
+//        const concatAnswer = "<span style=\"color:#fff; background:#40affd;\">"+ answer +"</span>";
+
+//
+//        const responseStringFull =  '<div className="model__content">' +
+//          '<div className="form__field">' +
+//            '<label>Answer</label>' +
+//            '<div className="model__content__summary">{ answer }</div>' +
+//          '</div>' +
+//
+//          '<div className="form__field">' +
+//            '<label>Passage Context</label>' +
+//            '<div className="passage model__content__summary">' +
+//              '<span>' + head + '</span>' +
+//              '<span style={background: "#40affd", color: "#fff"}>'+ answer +'</span>' +
+//              '<span>' + tail + '</span>' +
+//            '</div>' +
+//          '</div>' +
+//        '</div>';
+//
+//        const responseString = "<span style={background: \"#40affd\", color: \"#fff\"}>"+ answer +"</span>";
+
 
 
 /*******************************************************************************
@@ -241,6 +338,10 @@ class _McComponent extends React.Component {
       const question_tokens = responseData && responseData.question_tokens;
       const passage_tokens = responseData && responseData.passage_tokens;
 
+      const best_confs = [1.5019152499462507e-07, 6.246895623007731e-07, 0.9867215156555176];
+      const best_starts = [0, 2, 5];
+      const best_ends = [0, 3, 5];
+
       return (
         <div className="pane model">
           <PaneLeft>
@@ -254,7 +355,10 @@ class _McComponent extends React.Component {
                       answer={answer}
                       attention={attention}
                       question_tokens={question_tokens}
-                      passage_tokens={passage_tokens}/>
+                      passage_tokens={passage_tokens}
+                      best_confs = {best_confs}
+                      best_starts = {best_starts}
+                      best_ends = {best_ends}/>
           </PaneRight>
         </div>
       );
