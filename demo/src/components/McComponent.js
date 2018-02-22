@@ -266,9 +266,6 @@ class McOutput extends React.Component {
             <div className="passage model__content__summary">
               <span>{head}</span>
               <span dangerouslySetInnerHTML={{__html: modHtml}}></span>
-              <div>
-              <span> {head.length} </span>
-              </div>
             </div>
           </div>
           <div className="form__field">
