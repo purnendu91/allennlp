@@ -14,20 +14,28 @@ import ModelIntro from './ModelIntro'
 
 const mcExamples = [
     {
-      passage: "On May 21, 2013, NFL owners at their spring meetings in Boston voted and awarded the game to Levi's Stadium. The $1.2 billion stadium opened in 2014. It is the first Super Bowl held in the San Francisco Bay Area since Super Bowl XIX in 1985, and the first in California since Super Bowl XXXVII took place in San Diego in 2003.",
-      question: "Who voted on the venue for Super Bowl 50?",
+      passage: "Despite waiving longtime running back DeAngelo Williams and losing top wide receiver Kelvin Benjamin to a torn ACL in the preseason, the Carolina Panthers had their best regular season in franchise history, becoming the seventh team to win at least 15 regular season games since the league expanded to a 16-game schedule in 1978. Carolina started the season 14-0, not only setting franchise records for the best start and the longest single-season winning streak, but also posting the best start to a season by an NFC team in NFL history, breaking the 13-0 record previously shared with the 2009 New Orleans Saints and the 2011 Green Bay Packers. With their NFC-best 15-1 regular season record, the Panthers clinched home-field advantage throughout the NFC playoffs for the first time in franchise history. Ten players were selected to the Pro Bowl (the most in franchise history) along with eight All-Pro selections.",
+      question: "What team had the best start ever in the NFL?",
     },
     {
-      passage: "Super Bowl 50 was an American football game to determine the champion of the National Football League (NFL) for the 2015 season. The American Football Conference (AFC) champion Denver Broncos defeated the National Football Conference (NFC) champion Carolina Panthers 24â€“10 to earn their third Super Bowl title. The game was played on February 7, 2016, at Levi's Stadium in the San Francisco Bay Area at Santa Clara, California. As this was the 50th Super Bowl, the league emphasized the \"golden anniversary\" with various gold-themed initiatives, as well as temporarily suspending the tradition of naming each Super Bowl game with Roman numerals (under which the game would have been known as 'Super Bowl L'), so that the logo could prominently feature the Arabic numerals 50.",
-      question: "What city did Super Bowl 50 take place in?",
+      passage: "This was the first Super Bowl to feature a quarterback on both teams who was the #1 pick in their draft classes. Manning was the #1 selection of the 1998 NFL draft, while Newton was picked first in 2011. The matchup also pits the top two picks of the 2011 draft against each other: Newton for Carolina and Von Miller for Denver. Manning and Newton also set the record for the largest age difference between opposing Super Bowl quarterbacks at 13 years and 48 days (Manning was 39, Newton was 26).",
+      question: "Who was the #2 pick in the 2011 NFL Draft?",
     },
     {
-      passage: "The Matrix is a 1999 science fiction action film written and directed by The Wachowskis, starring Keanu Reeves, Laurence Fishburne, Carrie-Anne Moss, Hugo Weaving, and Joe Pantoliano. It depicts a dystopian future in which reality as perceived by most humans is actually a simulated reality called \"the Matrix\", created by sentient machines to subdue the human population, while their bodies' heat and electrical activity are used as an energy source. Computer programmer \"Neo\" learns this truth and is drawn into a rebellion against the machines, which involves other people who have been freed from the \"dream world.\"",
-      question: "Who stars in The Matrix?",
+      passage: "The Panthers used the San Jose State university practice facility and stayed at the San Jose Marriott. The Broncos practiced at Florida State university Facility and stayed at the Santa Clara Marriott.",
+      question: "At what university's facility did the Panthers practice?",
+    },
+    {
+      passage: "For the first time, the Super Bowl 50 Host Committee and the NFL have openly sought disabled veteran and lesbian, gay, bisexual and transgender-owned businesses in Business Connect, the Super Bowl program that provides local companies with contracting opportunities in and around the Super Bowl. The host committee has already raised over $40 million through sponsors including Apple, Google, Yahoo!, Intel, Gap, Chevron, and Dignity Health.",
+      question: "What is the name of the program that provides contracting work to local companies?",
     },
     {
       passage: "Kerbal Space Program (KSP) is a space flight simulation video game developed and published by Squad for Microsoft Windows, OS X, Linux, PlayStation 4, Xbox One, with a Wii U version that was supposed to be released at a later date. The developers have stated that the gaming landscape has changed since that announcement and more details will be released soon. In the game, players direct a nascent space program, staffed and crewed by humanoid aliens known as \"Kerbals\". The game features a realistic orbital physics engine, allowing for various real-life orbital maneuvers such as Hohmann transfer orbits and bi-elliptic transfer orbits.",
       question: "What does the physics engine allow for?",
+    },
+    {
+      passage: "But bounding the computation time above by some concrete function f(n) often yields complexity classes that depend on the chosen machine model. For instance, the language {xx | x is any binary string} can be solved in linear time on a multi-tape Turing machine, but necessarily requires quadratic time in the model of single-tape Turing machines. If we allow polynomial variations in running time, Cobham-Edmonds thesis states that \"the time complexities in any two reasonable and general models of computation are polynomially related\" (Goldreich 2008, Chapter 1.2). This forms the basis for the complexity class P, which is the set of decision problems solvable by a deterministic Turing machine within polynomial time. The corresponding set of function problems is FP.",
+      question: "A multi-tape Turing machine requires what type of time for a solution?",
     }
 ];
 
@@ -161,56 +169,88 @@ class McOutput extends React.Component {
     render() {
       const { passage, answer, attention, question_tokens, passage_tokens, best_confs, best_starts, best_ends } = this.props;
 
-//      const start = passage.indexOf(answer);
-//      const head = passage.slice(0, start);
-//      const tail = passage.slice(start + answer.length);
-
-//      const best_confs = [1.5019152499462507e-07, 6.246895623007731e-07, 0.9867215156555176];
-//      const best_starts = [0, 2, 5];
-//      const best_ends = [0, 3, 5];
-
       var modHtml = ""
 
       var start = passage.indexOf(passage_tokens[best_starts[0]]);
       const head = passage.slice(0, start);
-      var lastWord = passage_tokens[best_ends[best_ends.length-1]];
-      var end = passage.indexOf(lastWord) + lastWord.length;
-      const tail = passage.slice(end, passage.length);
 
-      const newBg = this.ColorLuminance("40affd", 0.1);
+      var newBg = this.ColorLuminance("40affd", 0.1);
 
 //      If your number X falls between A and B, and you would like Y to fall between C and D, you can apply the following linear transform:
 //
 //      Y = (X-A)/(B-A) * (D-C) + C
 
+      var sortedConfs = best_confs;
+      sortedConfs.sort(function(a, b){return a - b});
 
+      var spread = [];
+
+      var newRange = sortedConfs.length - 1; // (D-C)
+      var c = 0;
+      var orgRange =  sortedConfs[sortedConfs.length - 1] - sortedConfs[0]; //(B-A)
+
+      if(sortedConfs.length > 1){
+        for(var i = 0; i < sortedConfs.length; i++){
+            var y = (best_confs[i] - sortedConfs[0]) / orgRange * newRange;
+            spread.push(y);
+          }
+      }else { spread.push(1); }
+
+      var confHtml = "";
 
       for(var i = 0; i < best_confs.length; i++){
 
-            start = passage.indexOf(passage_tokens[best_starts[i]]);
+            var answerWords = "";
 
-            var spanLastWord = passage_tokens[best_ends[i]];
-            var lastWordIndex = passage.indexOf(spanLastWord)
-            var end = lastWordIndex + spanLastWord.length;
+            for(var j = best_starts[i]; j <= best_ends[i]; j++){
+                answerWords += passage_tokens[j];
+                if(passage_tokens[j+1] != ',' && passage_tokens[j+1] != '.' && j != best_ends[i] && passage_tokens[j+1] != '-' && passage_tokens[j] != '-' && passage_tokens[j+1] != ':' && passage_tokens[j] != '#'){
+                    answerWords += " ";
+                }
+            }
 
-            var answerSpan = passage.slice(start, end);
+            var firstWordIndex = passage.indexOf(answerWords)
+            var end = firstWordIndex + answerWords.length;
+
+            var answerSpan = passage.slice(firstWordIndex, end);
+
+            newBg = this.ColorLuminance("40affd", 1 - spread[i]);
 
             modHtml += "<span style=\"color:#000; background: " +newBg+ ";\">"+ answerSpan +"</span>";
 
             if(i+1 < best_confs.length){
 
-                start = passage.indexOf(passage_tokens[best_ends[i]]) +  passage_tokens[best_ends[i]].length;
+                var startforPlain = end;
 
-                end = passage.indexOf(passage_tokens[best_starts[i+1]]);
+                var answerWords = "";
 
-                var plainText = passage.slice(start, end);
+                for(var j = best_starts[i+1]; j <= best_ends[i+1]; j++){
+                    answerWords += passage_tokens[j];
+                    if(passage_tokens[j+1] != ',' && passage_tokens[j+1] != '.' && j != best_ends[i] && passage_tokens[j+1] != '-' && passage_tokens[j] != '-' && passage_tokens[j+1] != ':'){
+                        answerWords += " ";
+                    }
+                }
+
+                var firstWordIndex = passage.indexOf(answerWords)
+                var end = firstWordIndex + answerWords.length;
+
+                var answerSpanNext = passage.slice(firstWordIndex, end);
+
+                end = passage.indexOf(answerSpanNext, startforPlain);
+
+                var plainText = passage.slice(startforPlain, end);
+
+                modHtml += "<span>"+ plainText +"</span>";
+
+            }else{
+
+                var plainText = passage.slice(end, passage.length);
 
                 modHtml += "<span>"+ plainText +"</span>";
             }
+
+            confHtml += "<span>"+ answerSpan +" : "+ best_confs[i] +"</span></br>";
       }
-
-//        const concatAnswer = "<span style=\"color:#fff; background: " +newBg+ ";\">"+ answer +"</span>";
-
 
       return (
 
@@ -226,51 +266,21 @@ class McOutput extends React.Component {
             <div className="passage model__content__summary">
               <span>{head}</span>
               <span dangerouslySetInnerHTML={{__html: modHtml}}></span>
-              <span>{tail}</span>
               <div>
               <span> {head.length} </span>
               </div>
-              <div>
-              <span> {tail.length}</span>
-              </div>
-
+            </div>
+          </div>
+          <div className="form__field">
+            <label>Answer Confidence</label>
+            <div className="passage model__content__summary">
+              <span dangerouslySetInnerHTML={{__html: confHtml}}></span>
             </div>
           </div>
         </div>
       );
     }
   }
-
-
-
-
-//        const styles = {
-//            container: {
-//              background: "#40affd",
-//              color: "#fff"
-//            }
-//        };
-
-//        const concatAnswer = "<span style=\"color:#fff; background:#40affd;\">"+ answer +"</span>";
-
-//
-//        const responseStringFull =  '<div className="model__content">' +
-//          '<div className="form__field">' +
-//            '<label>Answer</label>' +
-//            '<div className="model__content__summary">{ answer }</div>' +
-//          '</div>' +
-//
-//          '<div className="form__field">' +
-//            '<label>Passage Context</label>' +
-//            '<div className="passage model__content__summary">' +
-//              '<span>' + head + '</span>' +
-//              '<span style={background: "#40affd", color: "#fff"}>'+ answer +'</span>' +
-//              '<span>' + tail + '</span>' +
-//            '</div>' +
-//          '</div>' +
-//        '</div>';
-//
-//        const responseString = "<span style={background: \"#40affd\", color: \"#fff\"}>"+ answer +"</span>";
 
 
 
@@ -338,9 +348,13 @@ class _McComponent extends React.Component {
       const question_tokens = responseData && responseData.question_tokens;
       const passage_tokens = responseData && responseData.passage_tokens;
 
-      const best_confs = [1.5019152499462507e-07, 6.246895623007731e-07, 0.9867215156555176];
-      const best_starts = [0, 2, 5];
-      const best_ends = [0, 3, 5];
+      const best_confs = responseData && responseData.best_confs;
+      const best_starts = responseData && responseData.best_starts;
+      const best_ends = responseData && responseData.best_ends;
+
+//      const best_confs = [1.5019152499462507e-07, 6.246895623007731e-07, 0.9867215156555176];
+//      const best_starts = [0, 2, 5];
+//      const best_ends = [0, 3, 5];
 
       return (
         <div className="pane model">

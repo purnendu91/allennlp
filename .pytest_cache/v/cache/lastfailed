@@ -1,0 +1,4 @@
+{
+  "tests/modules/seq2seq_encoders/pytorch_seq2seq_wrapper_test.py::TestPytorchSeq2SeqWrapper::test_wrapper_works_when_passed_state_with_zero_length_sequences": true,
+  "tests/modules/seq2vec_encoders/cnn_encoder_test.py::TestCnnEncoder::test_forward_does_correct_computation": true
+}

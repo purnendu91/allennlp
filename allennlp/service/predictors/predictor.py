@@ -1,12 +1,13 @@
 from typing import List, Tuple
 import json
-
+import collections
 from allennlp.common import Registrable
 from allennlp.common.util import JsonDict, sanitize
 from allennlp.data import DatasetReader, Instance
 from allennlp.models import Model
 from allennlp.models.archival import Archive, load_archive
-
+# import tensorflow as tf
+# import numpy as np
 
 class Predictor(Registrable):
     """
@@ -34,8 +35,149 @@ class Predictor(Registrable):
     def predict_json(self, inputs: JsonDict, cuda_device: int = -1) -> JsonDict:
         instance, return_dict = self._json_to_instance(inputs)
         outputs = self._model.forward_on_instance(instance, cuda_device)
+        best_span, conf, best_confs, best_starts, best_ends = self.get_best_span(outputs['span_start_logits'], outputs['span_end_logits'],
+                                                                                 outputs['span_start_logits'], outputs['span_end_logits'])
+        # start_logits = outputs['span_start_logits']
+        # end_logits = outputs['span_end_logits']
+        # span, scores = self.best_span_from_bounds(start_logits , end_logits, 10)
+        best_confs, best_starts, best_ends = self.separate_spans(best_confs, best_starts, best_ends)
+        outputs['best_confs'] = best_confs
+        outputs['best_starts'] = best_starts
+        outputs['best_confs'] = best_confs
+        outputs['best_ends'] = best_ends
+        outputs['conf'] = conf
         return_dict.update(outputs)
         return sanitize(return_dict)
+
+    # def best_span_from_bounds(self, start_logits, end_logits, bound=None):
+    #     """
+    #     Brute force approach to finding the best span from start/end logits in tensorflow, still usually
+    #     faster then the python dynamic-programming version
+    #     """
+    #     b = tf.shape(start_logits)[0]
+    #
+    #     # Using `top_k` to get the index and value at once is faster
+    #     # then using argmax and then gather to get in the value
+    #     top_k = tf.nn.top_k(start_logits + end_logits, k=1)
+    #     values, indices = [tf.squeeze(x) for x in top_k]
+    #
+    #     # Convert to (start_position, length) format
+    #     # indices = tf.stack([indices, tf.fill(b, 0)])
+    #
+    #     # TODO Might be better to build the batch x n_word x n_word
+    #     # matrix and use tf.matrix_band to zero out the unwanted ones...
+    #
+    #     if bound is None:
+    #         n_lengths = tf.shape(start_logits)[1]
+    #     else:
+    #         # take the min in case the bound > the context
+    #         n_lengths = np.minimum(bound, np.shape(start_logits)[0])
+    #
+    #     def compute(i, values, indices):
+    #         top_k = tf.nn.top_k(start_logits[:-i] + end_logits[i:])
+    #         b_values, b_indices = [tf.squeeze(x) for x in top_k]
+    #
+    #         # b_indices = tf.stack([b_indices, tf.fill((b,), i)])
+    #         indices = tf.where(b_values > values, b_indices, indices)
+    #         values = tf.maximum(values, b_values)
+    #         return i + 1, values, indices
+    #
+    #     _, values, indices = tf.while_loop(
+    #         lambda ix, values, indices: ix < n_lengths,
+    #         compute,
+    #         [1, values, indices],
+    #         back_prop=False)
+    #
+    #     spans = tf.stack([indices[0], indices[0] + indices[1]])
+    #     return spans, values
+
+
+    def get_best_span(self, word_start_probs, word_end_probs, word_start_logits, word_end_logits):
+        max_val = -1
+        best_word_span = None
+
+        span_start = -1
+        span_start_val = -1
+
+        best8_dict = {}
+
+        for word_ix in range(0, len(word_start_probs)):
+
+            # Move `span_start` forward iff that would improve our score
+            # Thus span_start will always be the largest valued start between
+            # [0, `word_ix`]
+            if span_start_val < word_start_probs[word_ix] and word_start_logits[word_ix] > 0:
+                span_start_val = word_start_probs[word_ix]
+                span_start = word_ix
+
+            # Check if the new span is the best one yet
+            if span_start_val * word_end_probs[word_ix] > max_val and word_end_logits[word_ix] > 0:
+                best_word_span = (span_start, word_ix)
+                max_val = span_start_val * word_end_probs[word_ix]
+                best8_dict[max_val] = [span_start, word_ix]
+
+        best8_dict = list(sorted(best8_dict.items(), key=lambda s: (s[1])))[:10]
+        #sorted(unsorted, key=lambda element: (element[1], element[2]))
+        best_confs = []
+        best_starts = []
+        best_ends = []
+        for item, val in best8_dict:
+            best_confs.append(item)
+            best_starts.append(val[0])
+            best_ends.append(val[1])
+
+        if len(best_confs) == 0 and span_start_val > 0:
+            best_confs.append(span_start_val)
+            best_starts.append(span_start)
+            best_ends.append(span_start)
+
+        return best_word_span, max_val, best_confs, best_starts, best_ends
+
+    def separate_spans(self, best_confs, best_starts, best_ends):
+        new_confs = []
+        new_starts = []
+        new_ends = []
+        new_dict = {}
+        for i in range(0, len(best_confs)):
+            for j in range(best_starts[i], best_ends[i] + 1):
+                new_dict[j] = max(new_dict.get(j, -1), best_confs[i])
+
+        new_dict = collections.OrderedDict(sorted(new_dict.items()))
+        start = -1
+        end = -1
+        conf = -1
+        i = 0
+        prev = -1
+        for k, v in new_dict.items():
+            if i == 0:
+                start = k
+                end = k
+                conf = v
+                prev = k
+                new_confs.append(conf)
+                new_starts.append(start)
+            elif i == len(new_dict) - 1:
+                if conf == v and k == prev + 1:
+                    new_ends.append(k)
+                else:
+                    new_ends.append(end)
+                    new_starts.append(k)
+                    new_ends.append(k)
+                    new_confs.append(v)
+            else:
+                if conf == v and k == prev + 1:
+                    end = k
+                else:
+                    new_starts.append(k)
+                    new_confs.append(v)
+                    new_ends.append(end)
+                    end = k
+                    start = k
+                    conf = v
+            i = i + 1
+            prev = k
+
+        return new_confs, new_starts, new_ends
 
     def _json_to_instance(self, json_dict: JsonDict) -> Tuple[Instance, JsonDict]:
         """

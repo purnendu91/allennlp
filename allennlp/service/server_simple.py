@@ -15,7 +15,7 @@ python -m allennlp.service.server_simple \
     --include-package my_stuff
 ```
 """
-from typing import List, Callable
+from typing import List, Callable, Dict
 import argparse
 import json
 import logging
@@ -30,17 +30,26 @@ from gevent.wsgi import WSGIServer
 from allennlp.common import JsonDict
 from allennlp.common.util import import_submodules
 from allennlp.models.archival import load_archive
-from allennlp.service.predictors import Predictor
+from allennlp.service.predictors import Predictor, DemoModel
 from allennlp.service.server_flask import ServerError
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+conf_threshold = 7
+predictor = Predictor
+passage = ""
+confidences = dict()
+question_dict = dict()
+confirm_head = "I am not sure I got that."
+confirm_tail = "? Reply yes to confirm or reanswer the question."
+last_question_asked = ""
 
 
 def make_app(predictor: Predictor,
              field_names: List[str] = None,
              static_dir: str = None,
              sanitizer: Callable[[JsonDict], JsonDict] = None,
-             title: str = "AllenNLP Demo") -> Flask:
+             title: str = "AllenNLP Demo",
+             use_cors: bool = False) -> Flask:
     """
     Creates a Flask app that serves up the provided ``Predictor``
     along with a front-end for interacting with it.
@@ -78,10 +87,47 @@ def make_app(predictor: Predictor,
 
     @app.route('/')
     def index() -> Response: # pylint: disable=unused-variable
+        global last_question_asked, confidences, question_dict, passage
+        last_question_asked = ""
+        confidences = dict()
+        question_dict = dict()
+        passage = ""
+        # For Chatbot ######################################################################################################
+        question_dict['Where do you want to go?'] = {"asked": 0, "answer": "", "satisfied": 0, "prefix": ". go to ",
+                                                     "confidence": -1, "confirmq": " Do you want to go to "}
+        question_dict['From where do you want to leave?'] = {"asked": 0, "answer": "", "satisfied": 0,
+                                                             "prefix": ". leave from ", "confidence": -1,
+                                                             "confirmq": " Do you want to leave from "}
+        question_dict['What is your passport number?'] = {"asked": 0, "answer": "", "satisfied": 0,
+                                                             "prefix": ". passport number ", "confidence": -1,
+                                                             "confirmq": " Is your passport number: "}
+        question_dict['When do you want to depart?'] = {"asked": 0, "answer": "", "satisfied": 0,
+                                                             "prefix": ". want to leave on  ", "confidence": -1,
+                                                             "confirmq": " Do you want to leave on "}
+        question_dict['How many tickets do you want?'] = {"asked": 0, "answer": "", "satisfied": 0,
+                                                        "prefix": ". tickets want ", "confidence": -1,
+                                                        "confirmq": " Do you want number of tickets: "}
+        # question_dict['What is your name?'] = {"asked": 0, "answer": "", "satisfied": 0,
+        #                                        "prefix": ". name is ", "confidence": -1,
+        #                                        "confirmq": " Is your name "}
+        # question_dict['What time do you want to leave?'] = {"asked": 0, "answer": "", "satisfied": 0,
+        #                                                "prefix": ". time to leave  ", "confidence": -1,
+        #                                                "confirmq": " Do you want to leave at "}
+
+        # question_dict.push({question: 'From where do you want to leave?', filename: 'res_source.txt', asked: 0, answer: "", satisfied: 0, prefix: ". leave from ", confidence: -1, confirmq: " Do you want to leave from "});
+        # question_dict.push({question: 'What is your name?', filename: 'res_name.txt', asked: 0, answer: "", satisfied: 0, prefix: ". name is ", confidence: -1, confirmq: " Is your name "});
+        # question_dict.push({question: 'When do you want to go?', filename: 'res_when.txt', asked: 0, answer: "", satisfied: 0, prefix: ". want to go on  ", confidence: -1, confirmq: " Do you want to go on "});
+        # question_dict.push({question: 'What time do you want to leave?', filename: 'res_time.txt', asked: 0, answer: "", satisfied: 0, prefix: ". time to go  ", confidence: -1, confirmq: " Do you want to leave at "});
+        # question_dict.push({question: 'What is your passport number?', filename: 'res_passport.txt', asked: 0, answer: "", satisfied: 0, prefix: ". passport number  ", confidence: -1, confirmq: " Is your passport number: "});
+
+        for key, value in question_dict.items():
+            confidences[key] = -1
+
         if static_dir is not None:
             return send_file(os.path.join(static_dir, 'index.html'))
         else:
             html = _html(title, field_names)
+            # return Response(response="Hi there, how may I help you?", status=200)
             return Response(response=html, status=200)
 
     @app.route('/predict', methods=['POST', 'OPTIONS'])
@@ -91,15 +137,18 @@ def make_app(predictor: Predictor,
             return Response(response="", status=200)
 
         data = request.get_json()
-
-        prediction = predictor.predict_json(data)
-        if sanitizer is not None:
-            prediction = sanitizer(prediction)
-
-        log_blob = {"inputs": data, "outputs": prediction}
-        logger.info("prediction: %s", json.dumps(log_blob))
-
-        return jsonify(prediction)
+        # data = {"passage": "I want to go to orlando", "question": "where?"}
+        # prediction = predictor.predict_json(data)
+        # if sanitizer is not None:
+        #     prediction = sanitizer(prediction)
+        #
+        # log_blob = {"inputs": data, "outputs": prediction}
+        # logger.info("prediction: %s", json.dumps(log_blob))
+        #
+        # return jsonify(prediction)
+        #
+        return update_question_dict(data["passage"])
+        # return jsonify(res)
 
     @app.route('/<path:path>')
     def static_proxy(path: str) -> Response: # pylint: disable=unused-variable
@@ -108,8 +157,73 @@ def make_app(predictor: Predictor,
         else:
             raise ServerError("static_dir not specified", 404)
 
-    return app
+    if use_cors:
+        return CORS(app)
+    else:
+        return app
 
+
+def satisfy_question(question):
+    question_dict[question]["satisfied"] = 1
+    del confidences[question]
+
+
+def get_next_question():
+    conf_tuples = sorted(confidences.items(), key=lambda s: s[1])
+    return conf_tuples[0][0] #return question with lowest confidence
+
+
+def update_question_dict(user_passage):
+    global passage, last_question_asked
+    if user_passage.lower() == "yes":
+        if last_question_asked != "":
+            satisfy_question(last_question_asked)
+    else:
+        passage = passage + " " + user_passage #updated global passage
+        for key, value in question_dict.items():
+        # {'passage': 'asad', 'question': 'fsdffdff'}
+            if value["satisfied"] == 0:
+                check_question(key)
+
+    if len(confidences) == 0:
+        # result = sanitize_res()
+        # return "That's all I need. Crunching deals!" + '\n' + result
+        response = jsonify(question_dict)
+        response.status_code = 200
+        return response
+
+    next_quest = get_next_question()
+    passage = passage + question_dict[next_quest]["prefix"]
+
+    if question_dict[next_quest]["asked"] == 1:
+        last_question_asked = next_quest
+        next_quest = confirm_head + question_dict[next_quest]["confirmq"] + question_dict[next_quest]["answer"] + confirm_tail
+    else:
+        question_dict[next_quest]["asked"] = 1
+    return jsonify({"Question: " : next_quest})
+
+
+def sanitize_res():
+    result = ""
+    for key, value in question_dict.items():
+        result = result + "Question: " + key + " Answer: " + value["answer"] +\
+                 " Confidence: " + str(value["confidence"]) + '\n'
+
+    return result
+
+
+def check_question(question):
+    data = {'passage': passage, 'question': question}
+    prediction = predictor.predict_json(data)
+    if prediction["conf"] > question_dict[question]["confidence"]:
+        question_dict[question]["answer"] = prediction["best_span_str"]
+        question_dict[question]["confidence"] = prediction["conf"]
+
+        if prediction["conf"] > conf_threshold:
+            satisfy_question(question)
+
+
+#######################################################################################################################
 
 def main(args):
     # Executing this file with no extra options runs the simple service with the bidaf test fixture
@@ -121,9 +235,8 @@ def main(args):
     parser.add_argument('--archive-path', type=str, help='path to trained archive file')
     parser.add_argument('--predictor', type=str, help='name of predictor')
     parser.add_argument('--static-dir', type=str, help='serve index.html from this directory')
-    parser.add_argument('--title', type=str, help='change the default page title', default="AllenNLP Demo")
+    parser.add_argument('--title', type=str, help='change the default page title', default="QA Chatbot")
     parser.add_argument('--field-name', type=str, action='append', help='field names to include in the demo')
-    parser.add_argument('--port', type=int, default=8000, help='port to serve the demo on')
 
     parser.add_argument('--include-package',
                         type=str,
@@ -137,18 +250,28 @@ def main(args):
     for package_name in args.include_package:
         import_submodules(package_name)
 
-    archive = load_archive(args.archive_path or 'tests/fixtures/bidaf/serialization/model.tar.gz')
+    # trained_models =  Dict[str, DemoModel]
+    # print(trained_models)
+    # predictors = {}
+    # for name, demo_model in trained_models.items():
+    #     predictor = demo_model.predictor()
+    #     predictors[name] = predictor
+    #
+    # model = predictors.get(model_name.lower())
+
+    archive = load_archive(args.archive_path or 'tests/fixtures/bidaf/serialization/bidaf-model-2017.09.15-charpad.tar.gz')
+    global predictor
     predictor = Predictor.from_archive(archive, args.predictor or 'machine-comprehension')
-    field_names = args.field_name or ['passage', 'question']
+
+    # field_names = args.field_name or ['passage', 'question']
+    field_names = args.field_name or ['passage']
 
     app = make_app(predictor=predictor,
                    field_names=field_names,
                    static_dir=args.static_dir,
                    title=args.title)
-    CORS(app)
 
-    http_server = WSGIServer(('0.0.0.0', args.port), app)
-    print(f"Model loaded, serving demo on port {args.port}")
+    http_server = WSGIServer(('0.0.0.0', 8000), app)
     http_server.serve_forever()
 
 #
@@ -174,7 +297,7 @@ _PAGE_TEMPLATE = Template("""
                         <div class="model__content">
                             $inputs
                             <div class="form__field form__field--btn">
-                                <button type="button" class="btn btn--icon-disclosure" onclick="predict()">Predict</button>
+                                <button type="button" class="btn btn--icon-disclosure" onclick="predict()">Answer</button>
                             </div>
                         </div>
                     </div>
@@ -185,7 +308,7 @@ _PAGE_TEMPLATE = Template("""
                         <div id="output" class="output">
                             <div class="placeholder">
                                 <div class="placeholder__content">
-                                    <p>Run model to view results</p>
+                                    <p>Hi there, how may I help you?</p>
                                 </div>
                             </div>
                         </div>
@@ -695,6 +818,7 @@ h1 {
   left: .5em
 }
 """
+
 
 def _html(title: str, field_names: List[str]) -> str:
     """
